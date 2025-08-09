@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>囲碁対局システム - KataGo GTP</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>囲碁対局システム</h1>
+            <div class="game-info">
+                <div class="status" id="status">ゲームを開始してください</div>
+                <div class="current-player" id="currentPlayer"></div>
+            </div>
+        </header>
+
+        <main>
+            <div class="game-board-container">
+                <div class="game-board" id="gameBoard">
+                    <!-- 碁盤はJavaScriptで生成 -->
+                </div>
+                <div class="board-info">
+                    <div class="coordinates">
+                        <div class="row-coords"></div>
+                        <div class="col-coords"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <button id="startGame" class="btn btn-primary">ゲーム開始</button>
+                <button id="resetGame" class="btn btn-secondary">リセット</button>
+                <button id="pass" class="btn btn-warning">パス</button>
+            </div>
+
+            <div class="game-log" id="gameLog">
+                <h3>対局ログ</h3>
+                <div class="log-content" id="logContent"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
