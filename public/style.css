@@ -68,37 +68,23 @@ main {
     background: #DEB887;
     border: 3px solid #8B4513;
     border-radius: 5px;
-    display: grid;
-    grid-template-columns: repeat(19, 1fr);
-    grid-template-rows: repeat(19, 1fr);
-    gap: 0;
     box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    overflow: visible;
 }
 
 .board-intersection {
-    position: relative;
-    width: 100%;
-    height: 100%;
+    position: absolute;
+    width: 20px;
+    height: 20px;
     cursor: pointer;
     transition: all 0.2s ease;
-}
-
-.board-intersection::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 2px;
-    height: 2px;
-    background: #000;
     border-radius: 50%;
-    transform: translate(-50%, -50%);
+    background: transparent;
+    border: 1px solid transparent;
 }
 
-.board-intersection:hover::before {
-    width: 8px;
-    height: 8px;
-    background: rgba(255, 0, 0, 0.5);
+.board-intersection:hover {
+    background: rgba(255, 0, 0, 0.3);
 }
 
 .stone {
@@ -127,44 +113,20 @@ main {
     box-shadow: 0 0 10px rgba(255, 255, 0, 0.8);
 }
 
-/* 碁盤の線 */
-.board-intersection[data-row="0"]::after,
-.board-intersection[data-row="18"]::after {
-    content: '';
+/* SVG碁盤のスタイル */
+.board-svg {
     position: absolute;
-    top: 50%;
-    left: 0;
-    right: 0;
-    height: 1px;
-    background: #000;
-    transform: translateY(-50%);
-}
-
-.board-intersection[data-col="0"]::after,
-.board-intersection[data-col="18"]::after {
-    content: '';
-    position: absolute;
-    left: 50%;
     top: 0;
-    bottom: 0;
-    width: 1px;
-    background: #000;
-    transform: translateX(-50%);
+    left: 0;
+    width: 600px;
+    height: 600px;
+    pointer-events: none;
+    z-index: 1;
+    background: transparent;
 }
 
-/* 星の位置 */
-.board-intersection[data-row="3"][data-col="3"]::before,
-.board-intersection[data-row="3"][data-col="9"]::before,
-.board-intersection[data-row="3"][data-col="15"]::before,
-.board-intersection[data-row="9"][data-col="3"]::before,
-.board-intersection[data-row="9"][data-col="9"]::before,
-.board-intersection[data-row="9"][data-col="15"]::before,
-.board-intersection[data-row="15"][data-col="3"]::before,
-.board-intersection[data-row="15"][data-col="9"]::before,
-.board-intersection[data-row="15"][data-col="15"]::before {
-    width: 6px;
-    height: 6px;
-    background: #000;
+.board-intersection {
+    z-index: 2;
 }
 
 .controls {

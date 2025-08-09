@@ -25,7 +25,25 @@ class GoGame {
 
     createBoard() {
         this.gameBoard.innerHTML = '';
+
+        // SVG碁盤を作成
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('class', 'board-svg');
+        svg.setAttribute('width', '600');
+        svg.setAttribute('height', '600');
+        svg.style.position = 'absolute';
+        svg.style.top = '0';
+        svg.style.left = '0';
         
+        // 碁盤の線を描画
+        this.drawSVGLines(svg);
+        
+        // 星の位置を描画
+        this.drawSVGStars(svg);
+        
+        this.gameBoard.appendChild(svg);
+
+        // 交点を作成
         for (let row = 0; row < this.boardSize; row++) {
             for (let col = 0; col < this.boardSize; col++) {
                 const intersection = document.createElement('div');
@@ -33,14 +51,116 @@ class GoGame {
                 intersection.dataset.row = row;
                 intersection.dataset.col = col;
                 intersection.dataset.position = this.getPositionString(col, row);
+
+                // 交点の位置を計算（SVGの座標系に合わせる）
+                const x = (col * 30) + 30; // 30px間隔、30pxオフセット
+                const y = (row * 30) + 30;
                 
+                intersection.style.left = `${x - 10}px`; // 20pxの交点の中心に合わせる
+                intersection.style.top = `${y - 10}px`;
+
                 intersection.addEventListener('click', (e) => {
                     this.handleIntersectionClick(e);
                 });
-                
+
                 this.gameBoard.appendChild(intersection);
             }
         }
+        
+        console.log('SVG board created with', svg.children.length, 'elements');
+    }
+
+    drawSVGLines(svg) {
+        // 縦線を描画（19本）
+        for (let i = 0; i < 19; i++) {
+            const x = (i * 30) + 30; // 30px間隔、30pxオフセット
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', x);
+            line.setAttribute('y1', 30);
+            line.setAttribute('x2', x);
+            line.setAttribute('y2', 570); // 600 - 30
+            line.setAttribute('stroke', '#000');
+            line.setAttribute('stroke-width', '1');
+            svg.appendChild(line);
+        }
+        
+        // 横線を描画（19本）
+        for (let i = 0; i < 19; i++) {
+            const y = (i * 30) + 30; // 30px間隔、30pxオフセット
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', 30);
+            line.setAttribute('y1', y);
+            line.setAttribute('x2', 570); // 600 - 30
+            line.setAttribute('y2', y);
+            line.setAttribute('stroke', '#000');
+            line.setAttribute('stroke-width', '1');
+            svg.appendChild(line);
+        }
+        
+        console.log('SVG lines drawn:', svg.querySelectorAll('line').length);
+    }
+
+    drawSVGStars(svg) {
+        const starPositions = [
+            [3, 3], [3, 9], [3, 15],
+            [9, 3], [9, 9], [9, 15],
+            [15, 3], [15, 9], [15, 15]
+        ];
+        
+        starPositions.forEach(([row, col]) => {
+            const x = (col * 30) + 30;
+            const y = (row * 30) + 30;
+            
+            const star = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            star.setAttribute('cx', x);
+            star.setAttribute('cy', y);
+            star.setAttribute('r', '3');
+            star.setAttribute('fill', '#000');
+            svg.appendChild(star);
+        });
+        
+        console.log('SVG stars drawn:', svg.querySelectorAll('circle').length);
+    }
+
+    verifyLinePositions() {
+        const intersections = this.gameBoard.querySelectorAll('.board-intersection');
+        const lines = this.gameBoard.querySelectorAll('.board-line');
+        
+        console.log('Verification:');
+        console.log('Intersections found:', intersections.length);
+        console.log('Lines drawn:', lines.length);
+        
+        // 最初の交点と最初の縦線の位置を比較
+        const firstIntersection = intersections[0];
+        const firstVerticalLine = this.gameBoard.querySelector('.board-line.vertical');
+        
+        if (firstIntersection && firstVerticalLine) {
+            const intersectionRect = firstIntersection.getBoundingClientRect();
+            const lineRect = firstVerticalLine.getBoundingClientRect();
+            
+            console.log('First intersection center:', {
+                x: intersectionRect.left + intersectionRect.width / 2,
+                y: intersectionRect.top + intersectionRect.height / 2
+            });
+            console.log('First vertical line position:', {
+                x: lineRect.left,
+                y: lineRect.top
+            });
+        }
+    }
+
+
+
+
+
+    isStarPosition(row, col) {
+        const starPositions = [
+            [3, 3], [3, 9], [3, 15],
+            [9, 3], [9, 9], [9, 15],
+            [15, 3], [15, 9], [15, 15]
+        ];
+        
+        return starPositions.some(([r, c]) => r === row && c === col);
     }
 
     getPositionString(col, row) {
