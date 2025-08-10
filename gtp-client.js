@@ -9,6 +9,7 @@ class GTPClient {
         this.isReady = false;
         this.commandQueue = [];
         this.isProcessing = false;
+        this.responseBuffer = '';
     }
 
     async start() {
@@ -48,34 +49,33 @@ class GTPClient {
     }
 
     handleOutput(output) {
-        const lines = output.split('\n');
-        
-        for (const line of lines) {
-            if (line.startsWith('=')) {
-                // 成功レスポンス
-                const response = line.substring(1).trim();
-                this.resolveCurrentCommand(response);
-            } else if (line.startsWith('?')) {
-                // エラーレスポンス
-                const error = line.substring(1).trim();
-                this.rejectCurrentCommand(new Error(error));
+        this.responseBuffer += output;
+        const terminator = '\n\n';
+        let terminatorIndex;
+
+        // Process all complete commands in the buffer
+        while ((terminatorIndex = this.responseBuffer.indexOf(terminator)) !== -1) {
+            const responseBlock = this.responseBuffer.substring(0, terminatorIndex).trim();
+            this.responseBuffer = this.responseBuffer.substring(terminatorIndex + terminator.length);
+
+            if (!this.isProcessing) {
+                // Received a response when not expecting one, might be initial GTP hello message.
+                console.log("Ignoring unsolicited response:", responseBlock);
+                continue;
             }
-        }
-    }
 
-    resolveCurrentCommand(response) {
-        if (this.commandQueue.length > 0) {
-            const { resolve } = this.commandQueue.shift();
-            resolve(response);
-            this.isProcessing = false;
-            this.processNextCommand();
-        }
-    }
+            const { resolve, reject } = this.commandQueue.shift();
 
-    rejectCurrentCommand(error) {
-        if (this.commandQueue.length > 0) {
-            const { reject } = this.commandQueue.shift();
-            reject(error);
+            if (responseBlock.startsWith('=')) {
+                const content = responseBlock.substring(1).trim();
+                resolve(content);
+            } else if (responseBlock.startsWith('?')) {
+                const error = responseBlock.substring(1).trim();
+                reject(new Error(error));
+            } else {
+                // Should not happen with a compliant GTP engine
+                reject(new Error(`Invalid GTP response: ${responseBlock}`));
+            }
             this.isProcessing = false;
             this.processNextCommand();
         }
@@ -135,34 +135,35 @@ class GTPClient {
             lastMove: null
         };
 
-        // 盤面の行を解析（動的に行範囲を決定）
-        const boardSize = board.size;
-        // 通常 showboard の出力は上部に8行のヘッダーがある
-        const boardStart = 8;
-        const boardEnd = boardStart + boardSize;
-        for (let i = boardStart; i < boardEnd; i++) {
-            if (i < lines.length) {
-                const line = lines[i];
-                const row = boardSize - (i - boardStart);
-                
-                // 座標を解析
-                for (let col = 0; col < boardSize; col++) {
-                    const char = line.charAt(col * 2 + 3); // 碁盤の文字位置
-                    let columnChar;
-                    if (col < 8) { // Columns A to H
-                        columnChar = String.fromCharCode(65 + col);
-                    } else { // Skip I and adjust for J to T
-                        columnChar = String.fromCharCode(65 + col + 1);
-                    }
-                    if (char === 'X') {
-                        board.stones[`${columnChar}${row}`] = 'black';
-                    } else if (char === 'O') {
-                        board.stones[`${columnChar}${row}`] = 'white';
+        const columnLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'];
+        // 正規表現で行番号で始まる行を抽出
+        const boardLineRegex = /^\s*(\d+)\s+/;
+
+        for (const line of lines) {
+            const match = line.match(boardLineRegex);
+            if (match) {
+                const row = parseInt(match[1], 10);
+                // 行番号が1から19の範囲にあるか確認
+                if (row >= 1 && row <= board.size) {
+                    // 各列の文字を固定位置から取得
+                    for (let col = 0; col < board.size; col++) {
+                        // A列は3文字目から始まり、2文字ごとに各列が配置される
+                        const charIndex = col * 2 + 3;
+                        if (charIndex < line.length) {
+                            const char = line.charAt(charIndex);
+                            const columnChar = columnLabels[col];
+                            const coord = `${columnChar}${row}`;
+
+                            if (char === 'X') {
+                                board.stones[coord] = 'black';
+                            } else if (char === 'O') {
+                                board.stones[coord] = 'white';
+                            }
+                        }
                     }
                 }
             }
         }
-
         return board;
     }
 

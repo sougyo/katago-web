@@ -244,8 +244,9 @@ class GoGame {
         });
 
         this.socket.on('movePlayed', (data) => {
-            this.addStone(data.position, data.color);
             this.board = data.board.stones || {};
+            this.updateBoard();
+            this.addStone(data.position, data.color);
             this.lastMove = data.position;
             this.currentPlayer = 'white';
             this.updateStatus('AIが考え中...');
@@ -254,8 +255,9 @@ class GoGame {
         });
 
         this.socket.on('aiMove', (data) => {
-            this.addStone(data.position, data.color);
             this.board = data.board.stones || {};
+            this.updateBoard();
+            this.addStone(data.position, data.color);
             this.lastMove = data.position;
             this.currentPlayer = 'black';
             this.updateStatus('あなたの番です');
@@ -322,7 +324,6 @@ class GoGame {
 
     updateBoard() {
         this.clearBoard();
-        
         for (const [position, color] of Object.entries(this.board)) {
             this.addStone(position, color);
         }
