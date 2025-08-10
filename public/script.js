@@ -164,20 +164,30 @@ class GoGame {
     }
 
     getPositionString(col, row) {
-        const colChar = String.fromCharCode(65 + col);
+        let colChar;
+        if (col < 8) { // Columns A to H
+            colChar = String.fromCharCode(65 + col);
+        } else { // Skip I and adjust for J to T
+            colChar = String.fromCharCode(65 + col + 1);
+        }
         const rowNum = this.boardSize - row;
         return `${colChar}${rowNum}`;
     }
 
     getIntersectionFromPosition(position) {
         if (position === 'pass') return null;
-        
+
         const colChar = position.charAt(0);
         const rowStr = position.substring(1);
-        
-        const col = colChar.charCodeAt(0) - 65;
+
+        let col;
+        if (colChar < 'I') { // Columns A to H
+            col = colChar.charCodeAt(0) - 65;
+        } else { // Skip I and adjust for J to T
+            col = colChar.charCodeAt(0) - 66;
+        }
         const row = this.boardSize - parseInt(rowStr);
-        
+
         return document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
     }
 

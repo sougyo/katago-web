@@ -135,19 +135,29 @@ class GTPClient {
             lastMove: null
         };
 
-        // 盤面の行を解析（通常は9行目から27行目）
-        for (let i = 8; i < 27; i++) {
+        // 盤面の行を解析（動的に行範囲を決定）
+        const boardSize = board.size;
+        // 通常 showboard の出力は上部に8行のヘッダーがある
+        const boardStart = 8;
+        const boardEnd = boardStart + boardSize;
+        for (let i = boardStart; i < boardEnd; i++) {
             if (i < lines.length) {
                 const line = lines[i];
-                const row = 19 - (i - 8);
+                const row = boardSize - (i - boardStart);
                 
                 // 座標を解析
-                for (let col = 0; col < 19; col++) {
+                for (let col = 0; col < boardSize; col++) {
                     const char = line.charAt(col * 2 + 3); // 碁盤の文字位置
+                    let columnChar;
+                    if (col < 8) { // Columns A to H
+                        columnChar = String.fromCharCode(65 + col);
+                    } else { // Skip I and adjust for J to T
+                        columnChar = String.fromCharCode(65 + col + 1);
+                    }
                     if (char === 'X') {
-                        board.stones[`${String.fromCharCode(65 + col)}${row}`] = 'black';
+                        board.stones[`${columnChar}${row}`] = 'black';
                     } else if (char === 'O') {
-                        board.stones[`${String.fromCharCode(65 + col)}${row}`] = 'white';
+                        board.stones[`${columnChar}${row}`] = 'white';
                     }
                 }
             }
