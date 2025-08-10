@@ -74,8 +74,8 @@ main {
 
 .board-intersection {
     position: absolute;
-    width: 20px;
-    height: 20px;
+    width: 30px; /* サイズを大きく変更 */
+    height: 30px; /* サイズを大きく変更 */
     cursor: pointer;
     transition: all 0.2s ease;
     border-radius: 50%;

@@ -56,8 +56,8 @@ class GoGame {
                 const x = (col * 30) + 30; // 30px間隔、30pxオフセット
                 const y = (row * 30) + 30;
                 
-                intersection.style.left = `${x - 10}px`; // 20pxの交点の中心に合わせる
-                intersection.style.top = `${y - 10}px`;
+                intersection.style.left = `${x - 15}px`; // 交点の中心に合わせるためのオフセットを調整
+                intersection.style.top = `${y - 15}px`;
 
                 intersection.addEventListener('click', (e) => {
                     this.handleIntersectionClick(e);
