@@ -6,11 +6,18 @@ class GoGame {
         this.gameStarted = false;
         this.board = {};
         this.lastMove = null;
-        
+        this.resizeTimer = null;
+
         this.initializeElements();
-        this.createBoard();
         this.setupEventListeners();
         this.setupSocketListeners();
+
+        // 初回描画
+        // DOMのレンダリングが完了してからボードを作成するために少し遅延させる
+        setTimeout(() => {
+            this.createBoard();
+            this.updateBoard();
+        }, 100);
     }
 
     initializeElements() {
@@ -23,27 +30,78 @@ class GoGame {
         this.logContent = document.getElementById('logContent');
     }
 
+    // 連続するリサイズイベントを効率化するデバウンス関数
+    debounce(func, delay) {
+        clearTimeout(this.resizeTimer);
+        this.resizeTimer = setTimeout(func, delay);
+    }
+
     createBoard() {
         this.gameBoard.innerHTML = '';
+        const boardWidth = this.gameBoard.clientWidth;
+        const gridSpacing = boardWidth / (this.boardSize + 1);
+        const offset = gridSpacing;
 
         // SVG碁盤を作成
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('class', 'board-svg');
-        svg.setAttribute('width', '600');
-        svg.setAttribute('height', '600');
-        svg.style.position = 'absolute';
-        svg.style.top = '0';
-        svg.style.left = '0';
-        
-        // 碁盤の線を描画
-        this.drawSVGLines(svg);
-        
-        // 星の位置を描画
-        this.drawSVGStars(svg);
-        
-        this.gameBoard.appendChild(svg);
+        svg.setAttribute('width', boardWidth);
+        svg.setAttribute('height', boardWidth);
 
-        // 交点を作成
+        // 碁盤の線、星、交点を描画
+        this.drawSVGLines(svg, boardWidth, gridSpacing, offset);
+        this.drawSVGStars(svg, gridSpacing, offset);
+        this.createIntersections(boardWidth, gridSpacing, offset);
+
+        this.gameBoard.appendChild(svg);
+    }
+
+    drawSVGLines(svg, boardWidth, gridSpacing, offset) {
+        for (let i = 0; i < this.boardSize; i++) {
+            const pos = offset + i * gridSpacing;
+            // 縦線
+            const vLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            vLine.setAttribute('x1', pos);
+            vLine.setAttribute('y1', offset);
+            vLine.setAttribute('x2', pos);
+            vLine.setAttribute('y2', boardWidth - offset);
+            vLine.setAttribute('stroke', '#000');
+            vLine.setAttribute('stroke-width', '1');
+            svg.appendChild(vLine);
+
+            // 横線
+            const hLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            hLine.setAttribute('x1', offset);
+            hLine.setAttribute('y1', pos);
+            hLine.setAttribute('x2', boardWidth - offset);
+            hLine.setAttribute('y2', pos);
+            hLine.setAttribute('stroke', '#000');
+            hLine.setAttribute('stroke-width', '1');
+            svg.appendChild(hLine);
+        }
+    }
+
+    drawSVGStars(svg, gridSpacing, offset) {
+        const starPositions = [
+            [3, 3], [3, 9], [3, 15],
+            [9, 3], [9, 9], [9, 15],
+            [15, 3], [15, 9], [15, 15]
+        ];
+        const starRadius = gridSpacing * 0.1;
+
+        starPositions.forEach(([row, col]) => {
+            const x = offset + col * gridSpacing;
+            const y = offset + row * gridSpacing;
+            const star = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            star.setAttribute('cx', x);
+            star.setAttribute('cy', y);
+            star.setAttribute('r', starRadius > 1 ? starRadius : 1);
+            star.setAttribute('fill', '#000');
+            svg.appendChild(star);
+        });
+    }
+
+    createIntersections(boardWidth, gridSpacing, offset) {
         for (let row = 0; row < this.boardSize; row++) {
             for (let col = 0; col < this.boardSize; col++) {
                 const intersection = document.createElement('div');
@@ -52,159 +110,40 @@ class GoGame {
                 intersection.dataset.col = col;
                 intersection.dataset.position = this.getPositionString(col, row);
 
-                // 交点の位置を計算（SVGの座標系に合わせる）
-                const x = (col * 30) + 30; // 30px間隔、30pxオフセット
-                const y = (row * 30) + 30;
-                
-                intersection.style.left = `${x - 15}px`; // 交点の中心に合わせるためのオフセットを調整
-                intersection.style.top = `${y - 15}px`;
+                const x = offset + col * gridSpacing;
+                const y = offset + row * gridSpacing;
 
-                intersection.addEventListener('click', (e) => {
-                    this.handleIntersectionClick(e);
-                });
+                intersection.style.width = `${gridSpacing}px`;
+                intersection.style.height = `${gridSpacing}px`;
+                intersection.style.left = `${x - gridSpacing / 2}px`;
+                intersection.style.top = `${y - gridSpacing / 2}px`;
 
+                intersection.addEventListener('click', (e) => this.handleIntersectionClick(e));
                 this.gameBoard.appendChild(intersection);
             }
         }
-        
-        console.log('SVG board created with', svg.children.length, 'elements');
-    }
-
-    drawSVGLines(svg) {
-        // 縦線を描画（19本）
-        for (let i = 0; i < 19; i++) {
-            const x = (i * 30) + 30; // 30px間隔、30pxオフセット
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', x);
-            line.setAttribute('y1', 30);
-            line.setAttribute('x2', x);
-            line.setAttribute('y2', 570); // 600 - 30
-            line.setAttribute('stroke', '#000');
-            line.setAttribute('stroke-width', '1');
-            svg.appendChild(line);
-        }
-        
-        // 横線を描画（19本）
-        for (let i = 0; i < 19; i++) {
-            const y = (i * 30) + 30; // 30px間隔、30pxオフセット
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', 30);
-            line.setAttribute('y1', y);
-            line.setAttribute('x2', 570); // 600 - 30
-            line.setAttribute('y2', y);
-            line.setAttribute('stroke', '#000');
-            line.setAttribute('stroke-width', '1');
-            svg.appendChild(line);
-        }
-        
-        console.log('SVG lines drawn:', svg.querySelectorAll('line').length);
-    }
-
-    drawSVGStars(svg) {
-        const starPositions = [
-            [3, 3], [3, 9], [3, 15],
-            [9, 3], [9, 9], [9, 15],
-            [15, 3], [15, 9], [15, 15]
-        ];
-        
-        starPositions.forEach(([row, col]) => {
-            const x = (col * 30) + 30;
-            const y = (row * 30) + 30;
-            
-            const star = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            star.setAttribute('cx', x);
-            star.setAttribute('cy', y);
-            star.setAttribute('r', '3');
-            star.setAttribute('fill', '#000');
-            svg.appendChild(star);
-        });
-        
-        console.log('SVG stars drawn:', svg.querySelectorAll('circle').length);
-    }
-
-    verifyLinePositions() {
-        const intersections = this.gameBoard.querySelectorAll('.board-intersection');
-        const lines = this.gameBoard.querySelectorAll('.board-line');
-        
-        console.log('Verification:');
-        console.log('Intersections found:', intersections.length);
-        console.log('Lines drawn:', lines.length);
-        
-        // 最初の交点と最初の縦線の位置を比較
-        const firstIntersection = intersections[0];
-        const firstVerticalLine = this.gameBoard.querySelector('.board-line.vertical');
-        
-        if (firstIntersection && firstVerticalLine) {
-            const intersectionRect = firstIntersection.getBoundingClientRect();
-            const lineRect = firstVerticalLine.getBoundingClientRect();
-            
-            console.log('First intersection center:', {
-                x: intersectionRect.left + intersectionRect.width / 2,
-                y: intersectionRect.top + intersectionRect.height / 2
-            });
-            console.log('First vertical line position:', {
-                x: lineRect.left,
-                y: lineRect.top
-            });
-        }
-    }
-
-
-
-
-
-    isStarPosition(row, col) {
-        const starPositions = [
-            [3, 3], [3, 9], [3, 15],
-            [9, 3], [9, 9], [9, 15],
-            [15, 3], [15, 9], [15, 15]
-        ];
-        
-        return starPositions.some(([r, c]) => r === row && c === col);
     }
 
     getPositionString(col, row) {
-        let colChar;
-        if (col < 8) { // Columns A to H
-            colChar = String.fromCharCode(65 + col);
-        } else { // Skip I and adjust for J to T
-            colChar = String.fromCharCode(65 + col + 1);
-        }
+        const colChar = String.fromCharCode(65 + col + (col >= 8 ? 1 : 0));
         const rowNum = this.boardSize - row;
         return `${colChar}${rowNum}`;
     }
 
     getIntersectionFromPosition(position) {
-        if (position === 'pass') return null;
-
+        if (position === 'pass' || !position) return null;
         const colChar = position.charAt(0);
         const rowStr = position.substring(1);
-
-        let col;
-        if (colChar < 'I') { // Columns A to H
-            col = colChar.charCodeAt(0) - 65;
-        } else { // Skip I and adjust for J to T
-            col = colChar.charCodeAt(0) - 66;
-        }
-        const row = this.boardSize - parseInt(rowStr);
-
-        return document.querySelector(`[data-row="${row}"][data-col="${col}"]`);
+        const col = colChar.charCodeAt(0) - 65 - (colChar > 'I' ? 1 : 0);
+        const row = this.boardSize - parseInt(rowStr, 10);
+        return document.querySelector(`.board-intersection[data-row="${row}"][data-col="${col}"]`);
     }
 
     handleIntersectionClick(event) {
-        if (!this.gameStarted || this.currentPlayer !== 'black') {
-            return;
-        }
-
+        if (!this.gameStarted || this.currentPlayer !== 'black') return;
         const intersection = event.currentTarget;
-        const position = intersection.dataset.position;
-        
-        // 既に石がある場合は無視
-        if (intersection.querySelector('.stone')) {
-            return;
-        }
-
-        this.socket.emit('playerMove', { position });
+        if (intersection.querySelector('.stone')) return;
+        this.socket.emit('playerMove', { position: intersection.dataset.position });
     }
 
     setupEventListeners() {
@@ -213,22 +152,23 @@ class GoGame {
             this.socket.emit('startGame', { handicap: parseInt(handicapStones, 10) || 0 });
         });
 
-        this.resetGameBtn.addEventListener('click', () => {
-            this.socket.emit('resetGame');
-        });
-
+        this.resetGameBtn.addEventListener('click', () => this.socket.emit('resetGame'));
         this.passBtn.addEventListener('click', () => {
             if (this.gameStarted && this.currentPlayer === 'black') {
                 this.socket.emit('pass');
             }
         });
+
+        window.addEventListener('resize', () => {
+            this.debounce(() => {
+                this.createBoard();
+                this.updateBoard();
+            }, 250);
+        });
     }
 
     setupSocketListeners() {
-        this.socket.on('connect', () => {
-            this.addLogEntry('システム', 'サーバーに接続しました', 'system');
-        });
-
+        this.socket.on('connect', () => this.addLogEntry('システム', 'サーバーに接続しました', 'system'));
         this.socket.on('disconnect', () => {
             this.addLogEntry('システム', 'サーバーから切断されました', 'system');
             this.updateStatus('サーバーから切断されました');
@@ -238,35 +178,17 @@ class GoGame {
             this.gameStarted = true;
             this.currentPlayer = gameState.currentPlayer;
             this.board = gameState.board.stones || {};
+            this.createBoard();
             this.updateBoard();
-            this.updateStatus('ゲーム開始 - あなたの番です');
+            this.updateStatus(this.currentPlayer === 'black' ? 'ゲーム開始 - あなたの番です' : 'ゲーム開始 - AIの番です');
             this.updateCurrentPlayer();
             this.addLogEntry('システム', 'ゲームが開始されました', 'system');
         });
 
-        this.socket.on('movePlayed', (data) => {
-            this.board = data.board.stones || {};
-            this.updateBoard();
-            this.addStone(data.position, data.color);
-            this.lastMove = data.position;
-            this.currentPlayer = 'white';
-            this.updateStatus('AIが考え中...');
-            this.updateCurrentPlayer();
-            this.addLogEntry('プレイヤー', `黒: ${data.position}`, 'player');
-        });
+        this.socket.on('movePlayed', (data) => this.handleMove(data, 'white', 'AIが考え中...'));
+        this.socket.on('aiMove', (data) => this.handleMove(data, 'black', 'あなたの番です'));
 
-        this.socket.on('aiMove', (data) => {
-            this.board = data.board.stones || {};
-            this.updateBoard();
-            this.addStone(data.position, data.color);
-            this.lastMove = data.position;
-            this.currentPlayer = 'black';
-            this.updateStatus('あなたの番です');
-            this.updateCurrentPlayer();
-            this.addLogEntry('AI', `白: ${data.position}`, 'ai');
-        });
-
-        this.socket.on('passPlayed', (data) => {
+        this.socket.on('passPlayed', () => {
             this.currentPlayer = 'white';
             this.updateStatus('AIが考え中...');
             this.updateCurrentPlayer();
@@ -278,7 +200,8 @@ class GoGame {
             this.currentPlayer = gameState.currentPlayer;
             this.board = gameState.board.stones || {};
             this.lastMove = null;
-            this.clearBoard();
+            this.createBoard();
+            this.updateBoard();
             this.updateStatus('ゲームを開始してください');
             this.updateCurrentPlayer();
             this.addLogEntry('システム', 'ゲームがリセットされました', 'system');
@@ -289,33 +212,41 @@ class GoGame {
             this.updateBoard();
         });
 
-        this.socket.on('error', (error) => {
-            this.addLogEntry('エラー', error.message, 'error');
-        });
+        this.socket.on('error', (error) => this.addLogEntry('エラー', error.message, 'error'));
+    }
+
+    handleMove(data, nextPlayer, statusMessage) {
+        const prevPlayer = nextPlayer === 'black' ? 'white' : 'black';
+        this.board = data.board.stones || {};
+        this.lastMove = data.position;
+        this.updateBoard();
+        this.currentPlayer = nextPlayer;
+        this.updateStatus(statusMessage);
+        this.updateCurrentPlayer();
+        this.addLogEntry(prevPlayer === 'black' ? 'プレイヤー' : 'AI', `${prevPlayer}: ${data.position}`, prevPlayer);
     }
 
     addStone(position, color) {
-        if (position === 'pass') return;
-        
+        if (position === 'pass' || !position) return;
         const intersection = this.getIntersectionFromPosition(position);
         if (!intersection) return;
 
-        // 既存の石を削除
+        // 既存の石をクリア
         const existingStone = intersection.querySelector('.stone');
-        if (existingStone) {
-            existingStone.remove();
-        }
+        if (existingStone) existingStone.remove();
 
-        // 新しい石を追加
         const stone = document.createElement('div');
         stone.className = `stone ${color}`;
-        
-        // 最後の手の場合はハイライト
-        if (position === this.lastMove) {
-            stone.classList.add('last-move');
-        }
-        
         intersection.appendChild(stone);
+
+        // 最後の一手をマーク
+        document.querySelectorAll('.last-move-marker').forEach(marker => marker.remove());
+        if (position === this.lastMove) {
+            const marker = document.createElement('div');
+            marker.className = 'last-move-marker';
+            // CSSでスタイルを適用するためクラス名のみ設定
+            stone.appendChild(marker);
+        }
     }
 
     clearBoard() {
@@ -325,8 +256,10 @@ class GoGame {
 
     updateBoard() {
         this.clearBoard();
-        for (const [position, color] of Object.entries(this.board)) {
-            this.addStone(position, color);
+        if (this.board) {
+            for (const [position, color] of Object.entries(this.board)) {
+                this.addStone(position, color);
+            }
         }
     }
 
@@ -337,7 +270,7 @@ class GoGame {
     updateCurrentPlayer() {
         if (this.gameStarted) {
             const playerText = this.currentPlayer === 'black' ? 'あなた（黒）' : 'AI（白）';
-            this.currentPlayerElement.textContent = `現在: ${playerText}`;
+            this.currentPlayerElement.textContent = `現在の手番: ${playerText}`;
         } else {
             this.currentPlayerElement.textContent = '';
         }
@@ -346,16 +279,12 @@ class GoGame {
     addLogEntry(sender, message, type) {
         const logEntry = document.createElement('div');
         logEntry.className = `log-entry ${type}`;
-        
         const timestamp = new Date().toLocaleTimeString();
-        logEntry.textContent = `[${timestamp}] ${sender}: ${message}`;
-        
-        this.logContent.appendChild(logEntry);
-        this.logContent.scrollTop = this.logContent.scrollHeight;
+        logEntry.innerHTML = `<strong>[${timestamp}] ${sender}:</strong> ${message}`;
+        this.logContent.prepend(logEntry);
     }
 }
 
-// ページ読み込み時にゲームを初期化
 document.addEventListener('DOMContentLoaded', () => {
     new GoGame();
 });
