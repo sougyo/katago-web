@@ -43,20 +43,45 @@ io.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
 
     // ゲーム開始
-    socket.on('startGame', async () => {
+    socket.on('startGame', async (data) => {
         try {
+            const handicap = data && data.handicap ? data.handicap : 0;
+
             if (!gtpClient) {
                 gtpClient = new GTPClient(KATAGO_PATH, CONFIG_PATH, MODEL_PATH);
                 await gtpClient.start();
-                await gtpClient.initGame();
             }
             
+            await gtpClient.initGame(handicap);
+            
             gameState.gameStarted = true;
-            gameState.currentPlayer = 'black';
+            // 置き石がある場合は白番から開始
+            gameState.currentPlayer = handicap > 0 ? 'white' : 'black';
             gameState.board = await gtpClient.getBoard();
             
             socket.emit('gameStarted', gameState);
-            console.log('Game started');
+            console.log(`Game started with ${handicap} handicap stones.`);
+
+            // 置き石がある場合、即座にAIの手番を実行
+            if (handicap > 0) {
+                setTimeout(async () => {
+                    try {
+                        const aiMove = await gtpClient.genMove('white');
+                        gameState.board = await gtpClient.getBoard();
+                        gameState.board.lastMove = aiMove;
+                        gameState.currentPlayer = 'black';
+
+                        socket.emit('aiMove', {
+                            position: aiMove,
+                            color: 'white',
+                            board: gameState.board
+                        });
+                    } catch (error) {
+                        console.error('AI move error:', error);
+                        socket.emit('error', { message: 'AIの手の生成に失敗しました' });
+                    }
+                }, 1000);
+            }
         } catch (error) {
             console.error('Failed to start game:', error);
             socket.emit('error', { message: 'ゲームの開始に失敗しました: ' + error.message });

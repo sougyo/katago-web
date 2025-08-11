@@ -102,10 +102,18 @@ class GTPClient {
     }
 
     // ゲーム初期化
-    async initGame() {
+    async initGame(handicap = 0) {
         await this.sendCommand('boardsize 19');
         await this.sendCommand('clear_board');
-        await this.sendCommand('komi 6.5');
+
+        if (handicap > 0) {
+            // 置き石を設定し、コミを0.5にする
+            await this.sendCommand(`fixed_handicap ${handicap}`);
+            await this.sendCommand('komi 0.5');
+        } else {
+            // 置き石なしの場合、コミを6.5にする
+            await this.sendCommand('komi 6.5');
+        }
     }
 
     // 手を打つ

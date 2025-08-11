@@ -209,7 +209,8 @@ class GoGame {
 
     setupEventListeners() {
         this.startGameBtn.addEventListener('click', () => {
-            this.socket.emit('startGame');
+            const handicapStones = document.getElementById('handicap-stones').value;
+            this.socket.emit('startGame', { handicap: parseInt(handicapStones, 10) || 0 });
         });
 
         this.resetGameBtn.addEventListener('click', () => {
