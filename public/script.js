@@ -240,7 +240,6 @@ class GoGame {
         intersection.appendChild(stone);
 
         // 最後の一手をマーク
-        document.querySelectorAll('.last-move-marker').forEach(marker => marker.remove());
         if (position === this.lastMove) {
             const marker = document.createElement('div');
             marker.className = 'last-move-marker';
