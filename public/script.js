@@ -28,6 +28,8 @@ class GoGame {
         this.resetGameBtn = document.getElementById('resetGame');
         this.passBtn = document.getElementById('pass');
         this.logContent = document.getElementById('logContent');
+        this.analyzeGameBtn = document.getElementById('analyzeGame');
+        this.resultContent = document.getElementById('resultContent');
     }
 
     // 連続するリサイズイベントを効率化するデバウンス関数
@@ -159,6 +161,13 @@ class GoGame {
             }
         });
 
+        this.analyzeGameBtn.addEventListener('click', () => {
+            if (this.gameStarted) {
+                this.socket.emit('analyze');
+                this.resultContent.textContent = '解析中...';
+            }
+        });
+
         window.addEventListener('resize', () => {
             this.debounce(() => {
                 this.createBoard();
@@ -210,6 +219,10 @@ class GoGame {
         this.socket.on('boardUpdate', (board) => {
             this.board = board.stones || {};
             this.updateBoard();
+        });
+
+        this.socket.on('analysisResult', (data) => {
+            this.resultContent.textContent = data.analysis;
         });
 
         this.socket.on('error', (error) => this.addLogEntry('エラー', error.message, 'error'));

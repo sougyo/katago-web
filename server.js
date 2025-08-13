@@ -217,6 +217,23 @@ io.on('connection', (socket) => {
         }
     });
 
+    // 解析
+    socket.on('analyze', async () => {
+        try {
+            if (gtpClient && gameState.gameStarted) {
+                const analysis = await gtpClient.sendCommand('kata-analyze 100');
+                socket.emit('analysisResult', { analysis });
+                // 解析を停止するために、別のコマンドを送信
+                await gtpClient.sendCommand('showboard');
+            } else {
+                socket.emit('error', { message: '解析を開始できません' });
+            }
+        } catch (error) {
+            console.error('Analysis error:', error);
+            socket.emit('error', { message: '解析に失敗しました' });
+        }
+    });
+
     // 切断時の処理
     socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
