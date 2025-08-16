@@ -222,7 +222,7 @@ class GoGame {
         });
 
         this.socket.on('analysisResult', (data) => {
-            this.resultContent.textContent = data.analysis;
+            this.resultContent.textContent = JSON.stringify(data);
         });
 
         this.socket.on('error', (error) => this.addLogEntry('エラー', error.message, 'error'));

@@ -221,10 +221,8 @@ io.on('connection', (socket) => {
     socket.on('analyze', async () => {
         try {
             if (gtpClient && gameState.gameStarted) {
-                const analysis = await gtpClient.sendCommand('kata-analyze 100');
+                const analysis = await gtpClient.getAnalysis();
                 socket.emit('analysisResult', { analysis });
-                // 解析を停止するために、別のコマンドを送信
-                await gtpClient.sendCommand('showboard');
             } else {
                 socket.emit('error', { message: '解析を開始できません' });
             }

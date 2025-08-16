@@ -10,6 +10,7 @@ class GTPClient {
         this.commandQueue = [];
         this.isProcessing = false;
         this.responseBuffer = '';
+        this.n = 0;
     }
 
     async start() {
@@ -64,15 +65,21 @@ class GTPClient {
                 continue;
             }
 
-            const { resolve, reject } = this.commandQueue.shift();
+            const { n, resolve, reject } = this.commandQueue.shift();
 
             if (responseBlock.startsWith('=')) {
-                const content = responseBlock.substring(1).trim();
-                resolve(content);
+                if (responseBlock.startsWith('=' + n)) {
+                    const content = responseBlock.substring(1).trim();
+                    resolve(content);
+                } else {
+                    console.log(`Warning: Response does not match expected command number ${n}:`, responseBlock);
+                    continue;
+                }
             } else if (responseBlock.startsWith('?')) {
                 const error = responseBlock.substring(1).trim();
                 reject(new Error(error));
             } else {
+
                 // Should not happen with a compliant GTP engine
                 reject(new Error(`Invalid GTP response: ${responseBlock}`));
             }
@@ -84,19 +91,20 @@ class GTPClient {
     processNextCommand() {
         if (this.commandQueue.length > 0 && !this.isProcessing) {
             this.isProcessing = true;
-            const { command } = this.commandQueue[0];
-            this.process.stdin.write(command + '\n');
+            const { n, command } = this.commandQueue[0];
+            this.process.stdin.write(n + ' ' + command + '\n');
         }
     }
 
     async sendCommand(command) {
+        const n = this.n++;
         return new Promise((resolve, reject) => {
             if (!this.isReady) {
                 reject(new Error('GTP client is not ready'));
                 return;
             }
 
-            this.commandQueue.push({ command, resolve, reject });
+            this.commandQueue.push({ n, command, resolve, reject });
             this.processNextCommand();
         });
     }
@@ -132,6 +140,40 @@ class GTPClient {
     async getBoard() {
         const response = await this.sendCommand('showboard');
         return this.parseBoard(response);
+    }
+
+    // 解析結果を取得
+    async getAnalysis() {
+        const promise1 = this.sendCommand('kata-analyze 100');
+        await new Promise((resolve, reject) => {
+            setTimeout(() => {
+                resolve();
+            }, 3000);
+        });
+        this.process.stdin.write("showboard" + '\n');
+        const response = await promise1;
+        if (!response) {
+            throw new Error('Failed to get analysis or board');
+        }
+        return this.parseAnalysis(response);
+    }
+
+    // 盤面の解析結果をパース
+    parseAnalysis(analysisText) {
+        /*
+        const analysis = {};
+        const lines = analysisText.split('\n');
+        for (const line of lines) {
+            const parts = line.split(':');
+            if (parts.length === 2) {
+                const key = parts[0].trim();
+                const value = parts[1].trim();
+                analysis[key] = value;
+            }
+        }
+        return analysis;
+        */
+       return analysisText; // 解析結果をそのまま返す
     }
 
     // 盤面の解析
