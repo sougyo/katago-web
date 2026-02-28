@@ -1,58 +1,95 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>囲碁対局システム - KataGo GTP</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KataGo 囲碁</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>囲碁対局システム</h1>
-            <div class="game-info">
-                <div class="status" id="status">ゲームを開始してください</div>
-                <div class="current-player" id="currentPlayer"></div>
-            </div>
-        </header>
 
-        <main>
-            <div class="game-board-container">
-                <div class="game-board" id="gameBoard">
-                    <!-- 碁盤はJavaScriptで生成 -->
-                </div>
-                <div class="board-info">
-                    <div class="coordinates">
-                        <div class="row-coords"></div>
-                        <div class="col-coords"></div>
-                    </div>
-                </div>
-            </div>
+  <!-- ===== Board List View ===== -->
+  <div id="view-list" class="view">
+    <header class="list-header">
+      <h1>KataGo 囲碁</h1>
+      <button id="btn-new-board" class="btn btn-primary">＋ 新しい対局</button>
+    </header>
+    <main id="board-grid" class="board-grid">
+      <!-- Board cards injected by JS -->
+    </main>
+  </div>
 
-            <div class="controls">
-                <div class="handicap-setting">
-                    <label for="handicap-stones">置き石の数:</label>
-                    <input type="number" id="handicap-stones" name="handicap-stones" min="0" max="9" value="0">
-                </div>
-                <button id="startGame" class="btn btn-primary">ゲーム開始</button>
-                <button id="resetGame" class="btn btn-secondary">リセット</button>
-                <button id="pass" class="btn btn-warning">パス</button>
-                <button id="analyzeGame" class="btn btn-info">解析</button>
-            </div>
-
-            <div class="analysis-result" id="analysisResult">
-                <h3>解析結果</h3>
-                <div class="result-content" id="resultContent"></div>
-            </div>
-
-            <div class="game-log" id="gameLog">
-                <h3>対局ログ</h3>
-                <div class="log-content" id="logContent"></div>
-            </div>
-        </main>
+  <!-- ===== Game View ===== -->
+  <div id="view-game" class="view hidden">
+    <header class="game-header">
+      <button id="btn-back" class="btn btn-ghost btn-sm">← 戻る</button>
+      <h2 id="game-title" class="game-title">対局</h2>
+      <div id="game-status" class="game-status"></div>
+    </header>
+    <div class="game-body">
+      <!-- Board -->
+      <div id="board-wrap" class="board-wrap">
+        <div id="board-container" class="board-container">
+          <!-- SVG injected by JS -->
+        </div>
+      </div>
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-info">
+          <div id="move-count" class="move-count">0 手目</div>
+          <div id="komi-label" class="komi-label"></div>
+        </div>
+        <div class="sidebar-controls">
+          <button id="btn-pass"   class="btn btn-warning" disabled>パス</button>
+          <button id="btn-resign" class="btn btn-danger"  disabled>投了</button>
+        </div>
+        <div class="sidebar-history">
+          <div class="history-header">棋譜</div>
+          <div id="move-list" class="move-list"></div>
+        </div>
+      </aside>
     </div>
+  </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+  <!-- ===== New Board Modal ===== -->
+  <div id="modal" class="modal-overlay hidden" role="dialog" aria-modal="true">
+    <div class="modal-dialog">
+      <h2 class="modal-title">新しい対局</h2>
+      <form id="form-new-board" autocomplete="off">
+        <div class="form-row">
+          <label for="input-name">対局名</label>
+          <input id="input-name" type="text" maxlength="50" placeholder="対局 1">
+        </div>
+        <div class="form-row">
+          <label for="input-size">碁盤サイズ</label>
+          <select id="input-size">
+            <option value="19" selected>19 × 19</option>
+            <option value="13">13 × 13</option>
+            <option value="9">9 × 9</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <label for="input-handicap">置き石 (0〜9)</label>
+          <input id="input-handicap" type="number" min="0" max="9" value="0">
+        </div>
+        <p class="form-note">※ あなたが黒番（ハンデあり）、KataGo が白番です</p>
+        <div class="form-actions">
+          <button type="button" id="btn-cancel-modal" class="btn btn-ghost">キャンセル</button>
+          <button type="submit" class="btn btn-primary">対局開始</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===== Loading Overlay (board creation) ===== -->
+  <div id="loading-overlay" class="modal-overlay hidden">
+    <div class="loading-dialog">
+      <div class="spinner"></div>
+      <p>KataGo を起動中…</p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

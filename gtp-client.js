@@ -1,229 +1,135 @@
 const { spawn } = require('child_process');
 
+/**
+ * GTP (Go Text Protocol) client for KataGo.
+ *
+ * Commands are queued and executed serially (one at a time).
+ * GTP responses are terminated by a blank line (\n\n).
+ * Success: "=<id> result\n\n"
+ * Failure: "?<id> message\n\n"
+ */
 class GTPClient {
-    constructor(katagoPath, configPath, modelPath) {
-        this.katagoPath = katagoPath;
-        this.configPath = configPath;
-        this.modelPath = modelPath;
-        this.process = null;
-        this.isReady = false;
-        this.commandQueue = [];
-        this.isProcessing = false;
-        this.responseBuffer = '';
-        this.n = 0;
+  constructor(katagoPath, configPath, modelPath) {
+    this.katagoPath = katagoPath;
+    this.configPath = configPath;
+    this.modelPath  = modelPath;
+    this.proc    = null;
+    this.cmdId   = 0;
+    this.queue   = [];   // waiting commands: {id, cmd, resolve, reject}
+    this.current = null; // command currently awaiting a response
+    this.buffer  = '';
+  }
+
+  /** Spawn KataGo and wait for it to initialise (load model, etc.). */
+  start() {
+    return new Promise((resolve, reject) => {
+      const args = ['gtp', '-config', this.configPath, '-model', this.modelPath];
+      console.log(`[GTP] start: ${this.katagoPath} ${args.join(' ')}`);
+
+      this.proc = spawn(this.katagoPath, args, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+      this.proc.stdout.on('data', chunk => {
+        this.buffer += chunk.toString();
+        this._flush();
+      });
+
+      this.proc.stderr.on('data', chunk => {
+        process.stderr.write(`[katago] ${chunk}`);
+      });
+
+      this.proc.on('error', err => {
+        reject(err);
+        this._rejectAll(err);
+      });
+
+      this.proc.on('close', code => {
+        const err = new Error(`KataGo process exited (code ${code})`);
+        this._rejectAll(err);
+      });
+
+      // Allow time for KataGo to load the neural network model.
+      setTimeout(resolve, 2000);
+    });
+  }
+
+  // ---- response parsing ----
+
+  _flush() {
+    let i;
+    while ((i = this.buffer.indexOf('\n\n')) !== -1) {
+      const block = this.buffer.slice(0, i).trim();
+      this.buffer  = this.buffer.slice(i + 2);
+      if (block) this._handleBlock(block);
     }
+  }
 
-    async start() {
-        return new Promise((resolve, reject) => {
-            console.log(`Starting KataGo: ${this.katagoPath} gtp -config ${this.configPath} -model ${this.modelPath}`);
-            
-            this.process = spawn(this.katagoPath, ['gtp', '-config', this.configPath, '-model', this.modelPath], {
-                stdio: ['pipe', 'pipe', 'pipe']
-            });
-
-            this.process.stdout.on('data', (data) => {
-                const output = data.toString();
-                console.log('KataGo output:', output);
-                this.handleOutput(output);
-            });
-
-            this.process.stderr.on('data', (data) => {
-                console.error('KataGo stderr:', data.toString());
-            });
-
-            this.process.on('error', (error) => {
-                console.error('Failed to start KataGo:', error);
-                reject(error);
-            });
-
-            this.process.on('close', (code) => {
-                console.log(`KataGo process exited with code ${code}`);
-                this.isReady = false;
-            });
-
-            // GTPプロトコルの初期化を待つ
-            setTimeout(() => {
-                this.isReady = true;
-                resolve();
-            }, 2000);
-        });
+  _handleBlock(block) {
+    if (!this.current) {
+      // Unsolicited output (e.g. startup messages) – ignore.
+      return;
     }
+    const { resolve, reject } = this.current;
+    this.current = null;
 
-    handleOutput(output) {
-        this.responseBuffer += output;
-        const terminator = '\n\n';
-        let terminatorIndex;
-
-        // Process all complete commands in the buffer
-        while ((terminatorIndex = this.responseBuffer.indexOf(terminator)) !== -1) {
-            const responseBlock = this.responseBuffer.substring(0, terminatorIndex).trim();
-            this.responseBuffer = this.responseBuffer.substring(terminatorIndex + terminator.length);
-
-            if (!this.isProcessing) {
-                // Received a response when not expecting one, might be initial GTP hello message.
-                console.log("Ignoring unsolicited response:", responseBlock);
-                continue;
-            }
-
-            const { n, resolve, reject } = this.commandQueue.shift();
-
-            if (responseBlock.startsWith('=')) {
-                if (responseBlock.startsWith('=' + n)) {
-                    const content = responseBlock.substring(1).trim();
-                    resolve(content);
-                } else {
-                    console.log(`Warning: Response does not match expected command number ${n}:`, responseBlock);
-                    continue;
-                }
-            } else if (responseBlock.startsWith('?')) {
-                const error = responseBlock.substring(1).trim();
-                reject(new Error(error));
-            } else {
-
-                // Should not happen with a compliant GTP engine
-                reject(new Error(`Invalid GTP response: ${responseBlock}`));
-            }
-            this.isProcessing = false;
-            this.processNextCommand();
-        }
+    if (block[0] === '=') {
+      resolve(block.replace(/^=\d*\s*/, '').trim());
+    } else if (block[0] === '?') {
+      reject(new Error(block.replace(/^\?\d*\s*/, '').trim() || 'GTP error'));
+    } else {
+      reject(new Error(`Unexpected GTP response: ${block}`));
     }
+    this._processQueue();
+  }
 
-    processNextCommand() {
-        if (this.commandQueue.length > 0 && !this.isProcessing) {
-            this.isProcessing = true;
-            const { n, command } = this.commandQueue[0];
-            this.process.stdin.write(n + ' ' + command + '\n');
-        }
+  _processQueue() {
+    if (this.current || this.queue.length === 0) return;
+    this.current = this.queue.shift();
+    this.proc.stdin.write(`${this.current.id} ${this.current.cmd}\n`);
+  }
+
+  _rejectAll(err) {
+    if (this.current) { this.current.reject(err); this.current = null; }
+    for (const c of this.queue) c.reject(err);
+    this.queue = [];
+  }
+
+  // ---- public API ----
+
+  send(cmd) {
+    return new Promise((resolve, reject) => {
+      if (!this.proc) { reject(new Error('GTP process not started')); return; }
+      const id = this.cmdId++;
+      this.queue.push({ id, cmd, resolve, reject });
+      this._processQueue();
+    });
+  }
+
+  async initGame(size, handicap, komi) {
+    await this.send(`boardsize ${size}`);
+    await this.send('clear_board');
+    if (handicap >= 2) {
+      await this.send(`fixed_handicap ${handicap}`);
+      await this.send(`komi ${komi ?? 0.5}`);
+    } else {
+      await this.send(`komi ${komi ?? 6.5}`);
     }
+  }
 
-    async sendCommand(command) {
-        const n = this.n++;
-        return new Promise((resolve, reject) => {
-            if (!this.isReady) {
-                reject(new Error('GTP client is not ready'));
-                return;
-            }
+  play(color, pos)   { return this.send(`play ${color} ${pos}`); }
+  async genMove(color) {
+    const r = await this.send(`genmove ${color}`);
+    return r.trim(); // "pass", "resign", or "A1" etc.
+  }
+  showBoard()        { return this.send('showboard'); }
 
-            this.commandQueue.push({ n, command, resolve, reject });
-            this.processNextCommand();
-        });
-    }
-
-    // ゲーム初期化
-    async initGame(handicap = 0) {
-        await this.sendCommand('boardsize 19');
-        await this.sendCommand('clear_board');
-
-        if (handicap > 0) {
-            // 置き石を設定し、コミを0.5にする
-            await this.sendCommand(`fixed_handicap ${handicap}`);
-            await this.sendCommand('komi 0.5');
-        } else {
-            // 置き石なしの場合、コミを6.5にする
-            await this.sendCommand('komi 6.5');
-        }
-    }
-
-    // 手を打つ
-    async playMove(color, move) {
-        const command = `play ${color} ${move}`;
-        return await this.sendCommand(command);
-    }
-
-    // AIの手を生成
-    async genMove(color) {
-        const command = `genmove ${color}`;
-        return await this.sendCommand(command);
-    }
-
-    // 現在の盤面を取得
-    async getBoard() {
-        const response = await this.sendCommand('showboard');
-        return this.parseBoard(response);
-    }
-
-    // 解析結果を取得
-    async getAnalysis() {
-        const promise1 = this.sendCommand('kata-analyze 100');
-        await new Promise((resolve, reject) => {
-            setTimeout(() => {
-                resolve();
-            }, 3000);
-        });
-        this.process.stdin.write("showboard" + '\n');
-        const response = await promise1;
-        if (!response) {
-            throw new Error('Failed to get analysis or board');
-        }
-        return this.parseAnalysis(response);
-    }
-
-    // 盤面の解析結果をパース
-    parseAnalysis(analysisText) {
-        /*
-        const analysis = {};
-        const lines = analysisText.split('\n');
-        for (const line of lines) {
-            const parts = line.split(':');
-            if (parts.length === 2) {
-                const key = parts[0].trim();
-                const value = parts[1].trim();
-                analysis[key] = value;
-            }
-        }
-        return analysis;
-        */
-       return analysisText; // 解析結果をそのまま返す
-    }
-
-    // 盤面の解析
-    parseBoard(boardText) {
-        const lines = boardText.split('\n');
-        const board = {
-            size: 19,
-            stones: {},
-            lastMove: null
-        };
-
-        const columnLabels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'];
-        // 正規表現で行番号で始まる行を抽出
-        const boardLineRegex = /^\s*(\d+)\s+/;
-
-        for (const line of lines) {
-            const match = line.match(boardLineRegex);
-            if (match) {
-                const row = parseInt(match[1], 10);
-                // 行番号が1から19の範囲にあるか確認
-                if (row >= 1 && row <= board.size) {
-                    // 各列の文字を固定位置から取得
-                    for (let col = 0; col < board.size; col++) {
-                        // A列は3文字目から始まり、2文字ごとに各列が配置される
-                        const charIndex = col * 2 + 3;
-                        if (charIndex < line.length) {
-                            const char = line.charAt(charIndex);
-                            const columnChar = columnLabels[col];
-                            const coord = `${columnChar}${row}`;
-
-                            if (char === 'X') {
-                                board.stones[coord] = 'black';
-                            } else if (char === 'O') {
-                                board.stones[coord] = 'white';
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        return board;
-    }
-
-    // 終了
-    async quit() {
-        if (this.process) {
-            await this.sendCommand('quit');
-            this.process.kill();
-        }
-    }
+  async quit() {
+    if (!this.proc) return;
+    try {
+      await Promise.race([this.send('quit'), new Promise(r => setTimeout(r, 800))]);
+    } catch (_) {}
+    this.proc.kill();
+    this.proc = null;
+  }
 }
 
 module.exports = GTPClient;
